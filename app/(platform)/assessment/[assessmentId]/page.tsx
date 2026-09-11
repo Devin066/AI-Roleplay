@@ -1,12 +1,18 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { ChevronRightIcon } from "@/components/ui/icons";
 import { groupTranscriptTurns } from "@/src/lib/assessments/transcriptTurns";
 import type {
   CoachTurnFeedback,
   SavedFinalAssessment,
+} from "@/src/lib/assessments/types";
+import {
+  effectiveAssessmentOutcome,
+  effectiveAssessmentScore,
 } from "@/src/lib/assessments/types";
 import type { AuthSessionUser } from "@/src/lib/auth/session";
 import { canUserManageRolePlay } from "@/src/lib/roleplays/access";
@@ -14,6 +20,7 @@ import type { RolePlayConfig } from "@/src/lib/roleplays/types";
 
 export default function FinalAssessmentDetailPage() {
   const params = useParams<{ assessmentId: string }>();
+  const searchParams = useSearchParams();
   const assessmentId = params.assessmentId;
   const [assessment, setAssessment] = useState<SavedFinalAssessment | null>(
     null,
@@ -30,6 +37,10 @@ export default function FinalAssessmentDetailPage() {
     null,
   );
   const [canDownloadTranscript, setCanDownloadTranscript] = useState(false);
+  const [overrideScoreDraft, setOverrideScoreDraft] = useState("");
+  const [overrideReasonDraft, setOverrideReasonDraft] = useState("");
+  const [isSavingOverride, setIsSavingOverride] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
 
   const transcriptTurns = useMemo(
     () => (assessment ? groupTranscriptTurns(assessment.transcript) : []),
@@ -61,6 +72,8 @@ export default function FinalAssessmentDetailPage() {
 
         const nextAssessment = (await response.json()) as SavedFinalAssessment;
         setAssessment(nextAssessment);
+        setOverrideScoreDraft(String(nextAssessment.scoreOverride?.score ?? nextAssessment.overallScore));
+        setOverrideReasonDraft(nextAssessment.scoreOverride?.reason ?? "");
         setCanDownloadTranscript(
           await canCurrentUserDownloadTranscript(nextAssessment),
         );
@@ -163,6 +176,49 @@ export default function FinalAssessmentDetailPage() {
     }
   }
 
+  async function saveScoreOverride(clear = false) {
+    if (!assessment) return;
+
+    setIsSavingOverride(true);
+    setOverrideMessage(null);
+    try {
+      const response = await fetch(`/api/assessments/${assessment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          clear
+            ? { clear: true }
+            : {
+                score: Number(overrideScoreDraft),
+                reason: overrideReasonDraft,
+              },
+        ),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | SavedFinalAssessment
+        | { error?: string }
+        | null;
+      if (!response.ok || !payload || !("overallScore" in payload)) {
+        throw new Error(
+          payload && "error" in payload && payload.error
+            ? payload.error
+            : `Unable to save the grade. HTTP ${response.status}.`,
+        );
+      }
+
+      setAssessment(payload);
+      setOverrideScoreDraft(String(payload.scoreOverride?.score ?? payload.overallScore));
+      setOverrideReasonDraft(payload.scoreOverride?.reason ?? "");
+      setOverrideMessage(clear ? "AI score restored." : "Course-admin grade saved.");
+    } catch (error) {
+      setOverrideMessage(
+        error instanceof Error ? error.message : "Unable to save the grade.",
+      );
+    } finally {
+      setIsSavingOverride(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -179,8 +235,32 @@ export default function FinalAssessmentDetailPage() {
     );
   }
 
+  const finalScore = effectiveAssessmentScore(assessment);
+  const finalOutcome = effectiveAssessmentOutcome(assessment);
+  const returnToLearnerResults = searchParams.get("from") === "learners";
+  const learningRecordUserId = searchParams.get("userId");
+  const returnToLearningRecord =
+    searchParams.get("from") === "learning-record" && Boolean(learningRecordUserId);
+  const backHref = returnToLearningRecord
+    ? `/control-panel/users/${encodeURIComponent(learningRecordUserId ?? "")}/learning-record`
+    : returnToLearnerResults
+      ? "/assessment/learners"
+      : "/assessment";
+  const backLabel = returnToLearningRecord
+    ? "Back to User Learning Record"
+    : returnToLearnerResults
+      ? "Back to My Learners' Results"
+      : "Back to My Results";
+
   return (
     <div className="space-y-6">
+      <Link
+        href={backHref}
+        className="inline-flex min-h-control items-center gap-1.5 rounded-xl px-1 text-sm font-semibold text-muted-foreground transition duration-200 ease-out hover:text-primary"
+      >
+        <ChevronRightIcon className="h-4 w-4 rotate-180" />
+        {backLabel}
+      </Link>
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-3xl border border-primary/20 bg-hero-grid p-6 shadow-soft">
           <p className="text-xs uppercase tracking-[0.24em] text-primary">
@@ -198,12 +278,12 @@ export default function FinalAssessmentDetailPage() {
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
-                assessment.outcome === "passed"
+                finalOutcome === "passed"
                   ? "bg-success-subtle text-success-subtle-foreground ring-success/30"
                   : "bg-warning-subtle text-warning-subtle-foreground ring-warning/30"
               }`}
             >
-              {assessment.outcome === "passed" ? "Passed" : "Needs Review"}
+              {finalOutcome === "passed" ? "Passed" : "Needs Review"}
             </span>
           </div>
         </div>
@@ -213,14 +293,76 @@ export default function FinalAssessmentDetailPage() {
             Overall Score
           </p>
           <p className="mt-4 text-6xl font-semibold text-foreground">
-            {assessment.overallScore}%
+            {finalScore}%
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
-            Generated from objectives, transcript signals, and conversation
-            completeness.
+            {assessment.scoreOverride
+              ? `Course-admin score replaces the AI score of ${assessment.overallScore}%.`
+              : "Generated from weighted rubric evidence, objective gates, and conversation signals."}
           </p>
         </div>
       </section>
+
+      {canDownloadTranscript && (
+        <section className="grid gap-5 rounded-3xl border border-primary/20 bg-surface p-6 shadow-soft xl:grid-cols-[0.72fr_1.28fr]">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Course-admin grade</h2>
+            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              Keep the AI result as the evidence baseline. A manual score is an accountable exception, not a replacement for the transcript review.
+            </p>
+            {assessment.scoreOverride && (
+              <p className="mt-4 text-sm font-semibold text-primary">
+                Last reviewed by {assessment.scoreOverride.overriddenBy.name} on {new Date(assessment.scoreOverride.overriddenAt).toLocaleDateString()}.
+              </p>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[9rem_1fr] sm:items-start">
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-muted-foreground">Final score</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={overrideScoreDraft}
+                onChange={(event) => setOverrideScoreDraft(event.target.value)}
+                className="w-full rounded-2xl border border-border bg-surface-sunken px-4 py-3 text-lg font-semibold tabular-nums text-foreground outline-none transition focus:border-primary focus:bg-surface focus:ring-4 focus:ring-ring/30"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-muted-foreground">Review rationale</span>
+              <textarea
+                value={overrideReasonDraft}
+                onChange={(event) => setOverrideReasonDraft(event.target.value)}
+                rows={3}
+                placeholder="Explain the transcript evidence that supports this exception."
+                className="w-full resize-y rounded-2xl border border-border bg-surface-sunken px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-primary focus:bg-surface focus:ring-4 focus:ring-ring/30"
+              />
+            </label>
+            <div className="flex flex-wrap gap-3 sm:col-span-2">
+              <button
+                type="button"
+                disabled={isSavingOverride}
+                onClick={() => void saveScoreOverride()}
+                className="inline-flex min-h-control items-center justify-center rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-raised transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                {isSavingOverride ? "Saving grade..." : "Save course-admin grade"}
+              </button>
+              {assessment.scoreOverride && (
+                <button
+                  type="button"
+                  disabled={isSavingOverride}
+                  onClick={() => void saveScoreOverride(true)}
+                  className="inline-flex min-h-control items-center justify-center rounded-2xl border border-border bg-surface px-5 py-2.5 text-sm font-semibold text-muted-foreground transition hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  Restore AI score
+                </button>
+              )}
+              {overrideMessage && <p className="self-center text-sm font-medium text-muted-foreground">{overrideMessage}</p>}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-3xl border border-primary/20 bg-surface p-6 shadow-soft">
@@ -268,9 +410,14 @@ export default function FinalAssessmentDetailPage() {
                 <p className="font-semibold text-foreground">
                   {dimension.label}
                 </p>
-                <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-primary">
-                  {dimension.score}%
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {dimension.weight ?? 0}% weight
+                  </span>
+                  <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-primary">
+                    {dimension.score}%
+                  </span>
+                </div>
               </div>
               <div className="mt-3 h-2 rounded-full bg-surface">
                 <div
@@ -281,10 +428,28 @@ export default function FinalAssessmentDetailPage() {
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 {dimension.summary}
               </p>
+              {dimension.evidence?.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-primary/15 pt-3">
+                  {dimension.evidence.map((excerpt) => (
+                    <p key={excerpt} className="text-xs leading-5 text-muted-foreground">
+                      “{excerpt}”
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
+
+      {assessment.criticalRisks?.length > 0 && (
+        <section className="rounded-3xl border border-danger/30 bg-danger-subtle p-6">
+          <h2 className="text-xl font-semibold text-danger-subtle-foreground">Critical review flags</h2>
+          <div className="mt-4 space-y-2 text-sm leading-6 text-danger-subtle-foreground">
+            {assessment.criticalRisks.map((risk) => <p key={risk}>{risk}</p>)}
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-3xl border border-primary/20 bg-surface p-6 shadow-soft">

@@ -1,59 +1,28 @@
 import { PublishedRoleplayCourses } from "@/components/courses/published-roleplay-courses";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { SimulationIcon } from "@/components/ui/icons";
 
 export default function CoursesPage() {
   return (
-    <div className="space-y-6">
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="overflow-hidden bg-surface/90">
-          <CardHeader>
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-raised ">
-              <SimulationIcon className="h-6 w-6" />
-            </div>
-            <CardDescription>Assigned roleplay courses</CardDescription>
-            <CardTitle className="text-3xl">Simulation Courses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              Start the roleplay courses assigned to your account, review the
-              scenario and objectives before joining, then complete the live AI
-              customer conversation to generate your final assessment.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Badge>AI customer roleplay</Badge>
-              <Badge variant="secondary">Assigned courses</Badge>
-              <Badge variant="secondary">Deadline aware</Badge>
-              <Badge variant="secondary">Final assessment</Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="panel-surface border-panel-border">
-          <CardHeader>
-            <CardDescription>How courses work</CardDescription>
-            <CardTitle>Practice, submit, improve</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <div className="rounded-2xl bg-panel-foreground/10 p-4">
-              Each course includes a learner scenario, customer persona,
-              objectives, duration, and attempt allowance set by the course
-              admin.
-            </div>
-            <div className="rounded-2xl bg-panel-foreground/10 p-4">
-              After the call, the system saves the transcript and creates
-              coaching feedback you can review from Assessment Results.
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+    <div className="space-y-8">
+      <header className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)] xl:items-end">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Simulation Courses
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+            Choose an assigned customer simulation, prepare around the stated
+            objectives, and complete the live AI conversation when you are
+            ready to be assessed.
+          </p>
+        </div>
+        <aside className="panel-surface rounded-xl p-5 shadow-raised">
+          <h2 className="font-semibold">A focused session, end to end</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Every available course includes the customer context, allotted
+            time, learning objectives, and any remaining attempts before you
+            enter the call.
+          </p>
+        </aside>
+      </header>
 
       <PublishedRoleplayCourses emptyState />
     </div>

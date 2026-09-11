@@ -138,6 +138,64 @@ export function CogIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function KeyRoundIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="m11 12 9-9" />
+      <path d="m17 6 2 2" />
+      <path d="m14 9 2 2" />
+    </BaseIcon>
+  );
+}
+
+export function MessageSquareIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M21 11.5a8.4 8.4 0 0 1-8.8 8.4 9.6 9.6 0 0 1-4.1-.9L3 21l1.6-4.4A8.4 8.4 0 0 1 3 11.5 8.4 8.4 0 0 1 11.8 3 8.4 8.4 0 0 1 21 11.5Z" />
+      <path d="M8 11h.01" />
+      <path d="M12 11h.01" />
+      <path d="M16 11h.01" />
+    </BaseIcon>
+  );
+}
+
+export function PaperclipIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m21.4 11.6-8.8 8.8a6 6 0 1 1-8.5-8.5l8.8-8.8a4 4 0 0 1 5.7 5.7l-8.8 8.8a2 2 0 1 1-2.8-2.8l8.1-8.1" />
+    </BaseIcon>
+  );
+}
+
+export function ImageIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9" r="1.5" />
+      <path d="m21 15-5-5L5 20" />
+    </BaseIcon>
+  );
+}
+
+export function VideoIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <rect x="3" y="6" width="13" height="12" rx="2" />
+      <path d="m16 10 5-3v10l-5-3" />
+    </BaseIcon>
+  );
+}
+
+export function XIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m6 6 12 12" />
+      <path d="m18 6-12 12" />
+    </BaseIcon>
+  );
+}
+
 export function LogOutIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <BaseIcon {...props}>

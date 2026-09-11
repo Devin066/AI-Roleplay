@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Header } from "@/components/layout/header";
+import { FeedbackDrawer } from "@/components/feedback/feedback-drawer";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import type { AuthSessionUser } from "@/src/lib/auth/session";
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [user, setUser] = useState<AuthSessionUser | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
@@ -102,6 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         role={user.role}
         mobileOpen={isMobileNavOpen}
         onCloseMobile={() => setIsMobileNavOpen(false)}
+        onOpenFeedback={() => setIsFeedbackOpen(true)}
       />
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         <Header
@@ -110,6 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={toggleSidebar}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
         />
         <main
           id="main-content"
@@ -120,6 +124,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
+      <FeedbackDrawer
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
     </div>
   );
 }

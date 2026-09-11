@@ -31,14 +31,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
 
-  const response = NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+  const response = NextResponse.json(
+    {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+        Pragma: "no-cache",
+      },
+    },
+  );
 
   response.cookies.set(sessionCookieName, createSessionToken(user.id), sessionCookieOptions());
   return response;

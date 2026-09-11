@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import type { SavedFinalAssessment } from "@/src/lib/assessments/types";
+import {
+  effectiveAssessmentOutcome,
+  effectiveAssessmentScore,
+  type SavedFinalAssessment,
+} from "@/src/lib/assessments/types";
 import type { AuthSessionUser } from "@/src/lib/auth/session";
 import type { SafeAuthUser } from "@/src/lib/auth/userStore";
 import { canUserManageRolePlay } from "@/src/lib/roleplays/access";
@@ -633,11 +637,16 @@ export function CourseAttemptsPage({ rolePlayId }: { rolePlayId: string }) {
                     <td className="px-4 py-3">
                       {assessment.learnerEmail ?? "Not recorded"}
                     </td>
-                    <td className="px-4 py-3 font-bold">
-                      {assessment.overallScore}%
+                    <td className="px-4 py-3 font-bold tabular-nums">
+                      {effectiveAssessmentScore(assessment)}%
+                      {assessment.scoreOverride && (
+                        <span className="mt-1 block text-[11px] font-semibold text-primary">
+                          Admin reviewed
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      {assessment.outcome === "passed"
+                      {effectiveAssessmentOutcome(assessment) === "passed"
                         ? "Passed"
                         : "Needs Review"}
                     </td>

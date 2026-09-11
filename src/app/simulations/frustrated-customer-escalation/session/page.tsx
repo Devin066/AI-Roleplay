@@ -228,7 +228,8 @@ export default function FrustratedCustomerEscalationSessionPage() {
   const objectiveEvalTimerRef = useRef<number | null>(null);
   const hasSavedTranscriptForCurrentRunRef = useRef(false);
 
-  const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
+  // The App ID is supplied only with the authenticated, short-lived RTC join response.
+  const hasRtcConfiguration = Boolean(startResponse?.engineerRtc.appId);
   const isActiveCall = status === "In Call" || status === "Muted";
   const hasEnded = status === "Ended";
   const isFinished = simulationState === "finished";
@@ -1195,15 +1196,9 @@ export default function FrustratedCustomerEscalationSessionPage() {
             </p>
           </div>
 
-          {(!appId || errorMessage) && (
+          {errorMessage && (
             <div className="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">
-              {!appId && (
-                <p>
-                  `NEXT_PUBLIC_AGORA_APP_ID` is not available in the client. Add it to `.env.local`
-                  and restart `npm run dev`.
-                </p>
-              )}
-              {errorMessage && <p className={!appId ? "mt-2" : ""}>{errorMessage}</p>}
+              <p>{errorMessage}</p>
             </div>
           )}
 
@@ -1324,7 +1319,7 @@ export default function FrustratedCustomerEscalationSessionPage() {
                   </span>
                 )}
                 <span className="text-sm text-slate-400">
-                  {appId ? "Agora App ID detected in client env" : "NEXT_PUBLIC_AGORA_APP_ID not set"}
+                  {hasRtcConfiguration ? "RTC session configured" : "RTC session not started"}
                 </span>
                 <span className="text-sm text-slate-500">RTC: {connectionState}</span>
                 <span className="text-sm text-slate-500">

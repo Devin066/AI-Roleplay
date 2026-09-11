@@ -5,7 +5,6 @@ import { getAuthSession } from "@/src/lib/auth/session";
 import { listAuthUsers } from "@/src/lib/auth/userStore";
 import { isDatabaseConfigured, prisma } from "@/src/lib/db/prisma";
 import {
-  getCoachFeedbackLlmConfig,
   getFinalAssessmentLlmConfig,
   getObjectiveEvaluatorLlmConfig,
 } from "@/src/lib/llm/jsonCompletion";
@@ -65,25 +64,22 @@ async function databaseHealth() {
 }
 
 function convoAiHealth() {
-  const llmConfig = getCoachFeedbackLlmConfig();
   const ready = isConfigured([
-    process.env.NEXT_PUBLIC_AGORA_APP_ID,
+    process.env.AGORA_APP_ID ?? process.env.NEXT_PUBLIC_AGORA_APP_ID,
     process.env.AGORA_APP_CERTIFICATE,
     process.env.AGORA_CUSTOMER_ID,
     process.env.AGORA_CUSTOMER_SECRET,
-    llmConfig.apiKey,
-    llmConfig.model,
-    llmConfig.baseUrl,
   ]);
+  const managedModel = process.env.CONVOAI_MANAGED_LLM_MODEL?.trim() || "gpt-4o-mini";
 
   return {
     id: "convoai",
     label: "ConvoAI Config",
     status: ready ? "operational" : "attention",
     detail: ready
-      ? `Agora app, customer credentials, and coach-feedback LLM BYOK are configured (${llmConfig.provider.toUpperCase()} / ${llmConfig.model}).`
-      : "Missing Agora app, customer credentials, or coach-feedback LLM credentials.",
-    meta: process.env.CONVOAI_BASE_URL?.trim() || "default endpoint",
+      ? `Agora app and customer credentials are configured for the managed ${managedModel} roleplay LLM.`
+      : "Missing Agora app or customer credentials.",
+    meta: "managed LLM",
   };
 }
 

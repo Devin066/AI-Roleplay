@@ -1,9 +1,12 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { Prisma } from "@prisma/client";
 import { isDatabaseConfigured, prisma } from "@/src/lib/db/prisma";
-import type { SavedFinalAssessment } from "@/src/lib/assessments/types";
+import type {
+  AssessmentScoreOverride,
+  SavedFinalAssessment,
+} from "@/src/lib/assessments/types";
 import { dataPath } from "@/src/lib/storage/dataDir";
 
 const assessmentsDir = dataPath("assessments");
@@ -34,6 +37,8 @@ export async function saveFinalAssessment(assessment: SavedFinalAssessment) {
       completedObjectives: assessment.completedObjectives as unknown as Prisma.InputJsonValue,
       missedObjectives: assessment.missedObjectives as unknown as Prisma.InputJsonValue,
       dimensions: assessment.dimensions as unknown as Prisma.InputJsonValue,
+      criticalRisks: assessment.criticalRisks as unknown as Prisma.InputJsonValue,
+      scoreOverride: assessment.scoreOverride as unknown as Prisma.InputJsonValue,
       transcript: assessment.transcript as unknown as Prisma.InputJsonValue,
       createdAt: new Date(assessment.createdAt),
     };
@@ -85,6 +90,10 @@ export async function getFinalAssessmentById(assessmentId: string) {
         assessment.completedObjectives as SavedFinalAssessment["completedObjectives"],
       missedObjectives: assessment.missedObjectives as SavedFinalAssessment["missedObjectives"],
       dimensions: assessment.dimensions as SavedFinalAssessment["dimensions"],
+      criticalRisks: assessment.criticalRisks as SavedFinalAssessment["criticalRisks"],
+      scoreOverride: assessment.scoreOverride
+        ? (assessment.scoreOverride as AssessmentScoreOverride)
+        : undefined,
       transcript: assessment.transcript as SavedFinalAssessment["transcript"],
     };
   }
@@ -122,6 +131,10 @@ export async function listFinalAssessments() {
         assessment.completedObjectives as SavedFinalAssessment["completedObjectives"],
       missedObjectives: assessment.missedObjectives as SavedFinalAssessment["missedObjectives"],
       dimensions: assessment.dimensions as SavedFinalAssessment["dimensions"],
+      criticalRisks: assessment.criticalRisks as SavedFinalAssessment["criticalRisks"],
+      scoreOverride: assessment.scoreOverride
+        ? (assessment.scoreOverride as AssessmentScoreOverride)
+        : undefined,
       transcript: assessment.transcript as SavedFinalAssessment["transcript"],
     }));
   }
@@ -146,4 +159,39 @@ export async function listFinalAssessments() {
 
   // TODO: Filter by the logged-in trainee once real authentication is available.
   return assessments.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+}
+
+export async function saveAssessmentScoreOverride(
+  assessmentId: string,
+  scoreOverride: AssessmentScoreOverride | undefined,
+) {
+  const assessment = await getFinalAssessmentById(assessmentId);
+  if (!assessment) {
+    return null;
+  }
+
+  const nextAssessment = {
+    ...assessment,
+    scoreOverride,
+  } satisfies SavedFinalAssessment;
+
+  return saveFinalAssessment(nextAssessment);
+}
+
+export async function deleteFinalAssessment(assessmentId: string) {
+  if (isDatabaseConfigured()) {
+    try {
+      await prisma.finalAssessment.delete({ where: { id: assessmentId } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    await unlink(assessmentFilePath(assessmentId));
+    return true;
+  } catch {
+    return false;
+  }
 }

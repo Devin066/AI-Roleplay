@@ -21,7 +21,22 @@ export const navigationItems: NavItem[] = [
       },
     ],
   },
-  { title: "Assessment Results", href: "/assessment", icon: "assessment" },
+  {
+    title: "Assessment Results",
+    href: "/assessment",
+    icon: "assessment",
+    children: [
+      {
+        title: "My Results",
+        href: "/assessment",
+      },
+      {
+        title: "My Learners' Results",
+        href: "/assessment/learners",
+        allowedRoles: ["root_admin", "course_admin"],
+      },
+    ],
+  },
   {
     title: "Control Panel",
     href: "/control-panel",
@@ -41,6 +56,11 @@ export const navigationItems: NavItem[] = [
       {
         title: "Activity Log",
         href: "/control-panel/activity",
+        allowedRoles: ["root_admin"],
+      },
+      {
+        title: "Feedbacks & Issues",
+        href: "/control-panel/feedback",
         allowedRoles: ["root_admin"],
       },
     ],

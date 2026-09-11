@@ -72,6 +72,8 @@ model FinalAssessment {
   completedObjectives Json
   missedObjectives    Json
   dimensions          Json
+  criticalRisks       Json     @default("[]")
+  scoreOverride       Json?
   transcript          Json
   createdAt           DateTime @default(now())
 
@@ -94,4 +96,44 @@ model RolePlayAttempt {
   @@unique([userId, rolePlayId])
   @@index([userId])
   @@index([rolePlayId])
+}
+
+model FeedbackSubmission {
+  id                  String   @id @default(cuid())
+  ticketNumber        Int      @unique @default(autoincrement())
+  userId              String
+  userName            String
+  userEmail           String
+  title               String
+  description         String
+  pagePath            String
+  category            String   @default("feedback")
+  attachmentName      String?
+  attachmentMimeType  String?
+  attachmentSizeBytes Int?
+  attachmentStatus    String?
+  status              String   @default("open")
+  createdAt           DateTime @default(now())
+
+  comments FeedbackComment[]
+
+  @@index([userId])
+  @@index([status, createdAt])
+}
+
+model FeedbackComment {
+  id                   String   @id @default(cuid())
+  feedbackSubmissionId String
+  authorId             String
+  authorName           String
+  authorEmail          String
+  body                 String
+  kind                 String   @default("comment")
+  previousStatus       String?
+  newStatus            String?
+  createdAt            DateTime @default(now())
+
+  feedbackSubmission FeedbackSubmission @relation(fields: [feedbackSubmissionId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackSubmissionId, createdAt])
 }

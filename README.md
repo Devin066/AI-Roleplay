@@ -75,6 +75,10 @@ Open:
 http://localhost:3000
 ```
 
+## Local PostgreSQL
+
+For an isolated development database on macOS, use the Postgres.app setup in [docs/local-postgres.md](docs/local-postgres.md). It keeps data local, applies Prisma migrations locally, and leaves Neon unchanged.
+
 ## Useful Commands
 
 ```bash
@@ -96,6 +100,8 @@ For AWS RDS, include SSL in the connection string:
 ```
 
 See `docs/project-handoff.md` for more deployment and Neon-to-AWS migration notes.
+
+For the current EC2-only deployment option, see `docs/ec2-app-db-deployment-flow.md`.
 
 ## Security Notes
 

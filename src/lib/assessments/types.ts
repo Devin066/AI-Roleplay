@@ -3,8 +3,22 @@ import type { TranscriptEntry } from "@/src/lib/transcripts/types";
 
 export type AssessmentDimension = {
   label: string;
+  weight: number;
   score: number;
   summary: string;
+  evidence: string[];
+};
+
+export type AssessmentScoreOverride = {
+  score: number;
+  outcome: "passed" | "needs_review";
+  reason: string;
+  overriddenAt: string;
+  overriddenBy: {
+    id: string;
+    name: string;
+    email: string;
+  };
 };
 
 export type TranscriptTurn = {
@@ -42,8 +56,18 @@ export type SavedFinalAssessment = {
   completedObjectives: Objective[];
   missedObjectives: Objective[];
   dimensions: AssessmentDimension[];
+  criticalRisks: string[];
+  scoreOverride?: AssessmentScoreOverride;
   transcript: TranscriptEntry[];
 };
+
+export function effectiveAssessmentScore(assessment: SavedFinalAssessment) {
+  return assessment.scoreOverride?.score ?? assessment.overallScore;
+}
+
+export function effectiveAssessmentOutcome(assessment: SavedFinalAssessment) {
+  return assessment.scoreOverride?.outcome ?? assessment.outcome;
+}
 
 export type GenerateAssessmentInput = {
   transcriptSessionId: string;

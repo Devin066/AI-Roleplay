@@ -172,7 +172,6 @@ export function RolePlayBuilder({
     Boolean(rolePlayId),
   );
   const [currentUser, setCurrentUser] = useState<AuthSessionUser | null>(null);
-  const canViewSystemMessage = currentUser?.role === "root_admin";
   const [editAccessDenied, setEditAccessDenied] = useState(false);
   const [currentRolePlayId, setCurrentRolePlayId] = useState<string | null>(
     rolePlayId ?? null,
@@ -1546,59 +1545,54 @@ export function RolePlayBuilder({
             )}
           </section>
 
-          <aside className="space-y-4">
-            <div className="overflow-hidden rounded-3xl border border-primary/20 bg-surface shadow-soft">
-              <div className="border-b border-primary/20 bg-surface-sunken/80 px-5 py-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-primary">
-                  Generated Config
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-foreground">
-                  ConvoAI Preview
-                </h3>
+          <aside className="self-start lg:sticky lg:top-24">
+            <section aria-labelledby="customer-preview-heading">
+              <div className="flex items-baseline justify-between gap-4 px-1">
+                <h2 id="customer-preview-heading" className="text-lg font-semibold text-foreground">
+                  Customer preview
+                </h2>
+                <span className="text-xs text-muted-foreground">Updates as you edit</span>
               </div>
-              <dl className="space-y-3 p-5 text-sm">
-                <div className="rounded-2xl bg-primary-subtle/60 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    greeting_message_switch
-                  </dt>
-                  <dd className="mt-2 font-semibold text-foreground">
-                    {generated.greeting_message_switch}
-                  </dd>
+              <div className="mx-auto mt-4 max-w-[21rem] rounded-[2.75rem] bg-panel p-2 shadow-overlay">
+                <div className="overflow-hidden rounded-[2.25rem] bg-surface-sunken p-4">
+                  <div className="mx-auto h-1.5 w-16 rounded-full bg-panel/25" aria-hidden="true" />
+                  <div className="mt-5">
+                    <p className="text-lg font-semibold tracking-tight text-foreground">
+                      About {characterName.trim() || "your customer"}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl bg-surface px-5 py-6 text-center shadow-soft">
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary-subtle text-3xl font-semibold text-primary">
+                      {characterName.trim().slice(0, 1).toUpperCase() || "AI"}
+                    </div>
+                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
+                      {characterName.trim() || "Customer name"}
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {characterRole.trim() || "Customer role"}
+                    </p>
+                    <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary-subtle px-3 py-1.5 text-xs font-semibold text-primary">
+                      <SparklesIcon className="h-3.5 w-3.5" />
+                      AI customer
+                    </span>
+                  </div>
+
+                  <div className="mt-5 max-h-52 overflow-y-auto pr-1 surface-scrollbar">
+                    <p className="text-sm leading-7 text-foreground">
+                      {personalityBackground.trim() || "Add a personality and background to help learners understand the customer before the roleplay begins."}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-primary/20 bg-primary-subtle/55 p-4">
+                    <p className="text-xs font-semibold text-primary">Opening line</p>
+                    <p className="mt-2 text-sm leading-6 text-primary-subtle-foreground">
+                      {greetingMessage.trim() || "Add the first thing this customer says when the roleplay starts."}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-2xl bg-primary-subtle/60 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    delay_ms
-                  </dt>
-                  <dd className="mt-2 font-semibold text-foreground">
-                    {generated.delay_ms}
-                  </dd>
-                </div>
-                <div className="rounded-2xl bg-primary-subtle/60 p-4">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    greeting_message
-                  </dt>
-                  <dd className="mt-2 leading-6 text-muted-foreground">
-                    {generated.greeting_message}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-            {canViewSystemMessage && (
-              <div className="panel-surface overflow-hidden rounded-3xl border border-panel-border shadow-soft">
-                <div className="border-b border-border px-5 py-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-info">
-                    System Message Preview
-                  </p>
-                  <p className="mt-2 text-sm text-subtle-foreground">
-                    This is the generated roleplay instruction sent to the AI
-                    customer.
-                  </p>
-                </div>
-                <pre className="max-h-[420px] overflow-y-auto whitespace-pre-wrap p-5 text-xs leading-5 text-subtle-foreground">
-                  {generated.system_message}
-                </pre>
               </div>
-            )}
+            </section>
           </aside>
         </main>
       </div>

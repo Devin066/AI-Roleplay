@@ -3,7 +3,7 @@ import { FinalAssessmentsList } from "@/components/assessment/final-assessments-
 export default function AssessmentPage() {
   return (
     <div className="space-y-6">
-      <FinalAssessmentsList />
+      <FinalAssessmentsList initialScope="mine" />
     </div>
   );
 }

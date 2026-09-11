@@ -148,12 +148,17 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "none" },
         },
+        "drawer-in": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
       },
       animation: {
         "fade-in": "fade-in 200ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "drawer-in": "drawer-in 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         shimmer: "shimmer 1.6s infinite",
       },
       zIndex: {

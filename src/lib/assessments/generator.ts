@@ -22,6 +22,7 @@ type AiAssessmentPayload = {
   scores?: unknown;
   dimensionScores?: unknown;
   objectiveResults?: unknown;
+  criticalRisks?: unknown;
 };
 
 type NormalizedAiAssessment = {
@@ -32,14 +33,45 @@ type NormalizedAiAssessment = {
   improvements: string[];
   dimensions: AssessmentDimension[];
   objectiveResults: Objective[];
+  criticalRisks: string[];
 };
 
-const ASSESSMENT_DIMENSION_LABELS = [
-  "Objective Coverage",
-  "Customer Handling",
-  "Action Clarity",
-  "Conversation Completeness",
+const ASSESSMENT_RUBRIC = [
+  {
+    label: "Objective Evidence & Coverage",
+    weight: 30,
+    description: "Required objectives are substantively satisfied with trainee-side evidence.",
+  },
+  {
+    label: "Discovery & Situation Framing",
+    weight: 15,
+    description: "Relevant questions, active listening, and accurate framing of the customer's context.",
+  },
+  {
+    label: "Empathy, Ownership & Trust",
+    weight: 15,
+    description: "Role-appropriate empathy, accountability, and confidence without overpromising.",
+  },
+  {
+    label: "Technical / Business Accuracy",
+    weight: 15,
+    description: "Accurate, relevant explanations and recommendations grounded in the scenario.",
+  },
+  {
+    label: "Resolution Plan & Expectations",
+    weight: 15,
+    description: "Specific next steps, ownership, timeline, and confirmation of expectations.",
+  },
+  {
+    label: "Communication & Conversation Control",
+    weight: 10,
+    description: "Clear, concise, professional dialogue that adapts and closes naturally.",
+  },
 ] as const;
+
+const ASSESSMENT_DIMENSION_LABELS = ASSESSMENT_RUBRIC.map(
+  (dimension) => dimension.label,
+);
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -104,19 +136,22 @@ function normalizeStringArray(value: unknown, fallback: string[]) {
 }
 
 function dimensionSummaryFallback(label: string, score: number) {
-  if (label === "Objective Coverage") {
-    return "Assessment generated with partial rubric structure. Review the completed and missed objectives for evidence-based coverage.";
+  return `${label} is scored at ${score}. The model did not provide enough evidence for a fuller dimension explanation.`;
+}
+
+function normalizeEvidence(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
   }
 
-  if (label === "Customer Handling") {
-    return `Customer handling is estimated from the final assessment score of ${score} because the model did not provide this dimension summary.`;
-  }
+  return value
+    .map((item) => asString(item).trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
 
-  if (label === "Action Clarity") {
-    return `Action clarity is estimated from the final assessment score of ${score} because the model did not provide this dimension summary.`;
-  }
-
-  return `Conversation completeness is estimated from the final assessment score of ${score} because the model did not provide this dimension summary.`;
+function dimensionWeight(label: string) {
+  return ASSESSMENT_RUBRIC.find((dimension) => dimension.label === label)?.weight ?? 0;
 }
 
 function normalizeDimensionItem(item: unknown, fallbackLabel?: string): AssessmentDimension | null {
@@ -145,53 +180,44 @@ function normalizeDimensionItem(item: unknown, fallbackLabel?: string): Assessme
   const score = clampScore(record.score ?? record.value ?? record.rating);
   return {
     label,
+    weight: dimensionWeight(label),
     score,
     summary: rawSummary.trim() || dimensionSummaryFallback(label, score),
+    evidence: normalizeEvidence(record.evidence ?? record.excerpts),
   };
 }
 
 function normalizeDimensions(value: unknown): AssessmentDimension[] {
-  if (Array.isArray(value)) {
-    return value
+  const dimensions = Array.isArray(value)
+    ? value
       .map((item) => normalizeDimensionItem(item))
       .filter((item): item is AssessmentDimension => Boolean(item))
-      .slice(0, 6);
-  }
+    : Object.entries(asRecord(value) ?? {})
+        .map(([label, item]) => normalizeDimensionItem(item, label))
+        .filter((item): item is AssessmentDimension => Boolean(item));
 
-  const record = asRecord(value);
-  if (!record) {
-    return [];
-  }
-
-  return Object.entries(record)
-    .map(([label, item]) => {
-      if (typeof item === "number") {
-        return {
-          label,
-          score: clampScore(item),
-          summary: dimensionSummaryFallback(label, clampScore(item)),
-        };
-      }
-
-      if (typeof item === "string") {
-        return {
-          label,
+  const byLabel = new Map(dimensions.map((dimension) => [dimension.label, dimension]));
+  return ASSESSMENT_RUBRIC.map((rubric) => {
+    const dimension = byLabel.get(rubric.label);
+    return dimension
+      ? { ...dimension, weight: rubric.weight }
+      : {
+          label: rubric.label,
+          weight: rubric.weight,
           score: 0,
-          summary: item,
+          summary: dimensionSummaryFallback(rubric.label, 0),
+          evidence: [],
         };
-      }
-
-      return normalizeDimensionItem(item, label);
-    })
-    .filter((item): item is AssessmentDimension => Boolean(item))
-    .slice(0, 6);
+  });
 }
 
 function fallbackDimensions(overallScore: number): AssessmentDimension[] {
-  return ASSESSMENT_DIMENSION_LABELS.map((label) => ({
+  return ASSESSMENT_RUBRIC.map(({ label, weight }) => ({
     label,
+    weight,
     score: overallScore,
     summary: dimensionSummaryFallback(label, overallScore),
+    evidence: [],
   }));
 }
 
@@ -273,6 +299,7 @@ function parseAiAssessment(content: string, objectives: Objective[]): Normalized
   const improvements = normalizeStringArray(parsed.improvements, [
     "Continue practicing concise summaries and customer confirmation checks.",
   ]);
+  const criticalRisks = normalizeStringArray(parsed.criticalRisks, []);
 
   return {
     overallScore,
@@ -282,6 +309,7 @@ function parseAiAssessment(content: string, objectives: Objective[]): Normalized
     improvements,
     dimensions: dimensions.length > 0 ? dimensions : fallbackDimensions(overallScore),
     objectiveResults,
+    criticalRisks,
   };
 }
 
@@ -291,6 +319,31 @@ function completedObjectives(objectives: Objective[]) {
 
 function missedRequiredObjectives(objectives: Objective[]) {
   return objectives.filter((objective) => objective.required && !objective.completed);
+}
+
+function evidenceFirstScore(
+  dimensions: AssessmentDimension[],
+  missedObjectives: Objective[],
+  criticalRisks: string[],
+) {
+  const weightedScore = Math.round(
+    dimensions.reduce(
+      (total, dimension) => total + dimension.score * (dimension.weight / 100),
+      0,
+    ),
+  );
+
+  // Passing requires complete required-objective coverage. These gates keep a polished
+  // conversation from passing when key customer needs were not actually addressed.
+  if (criticalRisks.length > 0) {
+    return Math.min(weightedScore, 59);
+  }
+
+  if (missedObjectives.length > 0) {
+    return Math.min(weightedScore, 74);
+  }
+
+  return weightedScore;
 }
 
 function assessmentSchema() {
@@ -305,6 +358,7 @@ function assessmentSchema() {
       "improvements",
       "dimensions",
       "objectiveResults",
+      "criticalRisks",
     ],
     properties: {
       overallScore: {
@@ -327,12 +381,16 @@ function assessmentSchema() {
         type: "array",
         items: { type: "string" },
       },
+      criticalRisks: {
+        type: "array",
+        items: { type: "string" },
+      },
       dimensions: {
         type: "array",
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["label", "score", "summary"],
+          required: ["label", "score", "summary", "evidence"],
           properties: {
             label: {
               type: "string",
@@ -344,6 +402,10 @@ function assessmentSchema() {
               maximum: 100,
             },
             summary: { type: "string" },
+            evidence: {
+              type: "array",
+              items: { type: "string" },
+            },
           },
         },
       },
@@ -392,9 +454,11 @@ export async function generateFinalAssessment(
     "Do not inflate scores because the conversation ended, all objectives were marked complete by the tracker, the customer_ai appeared satisfied, the trainee used polite language without substance, or the trainee mentioned keywords without meaningfully addressing the objective.",
     "Use specific, actionable coaching language. Strengths and improvements should help the trainee understand what they did well, what they missed, and how to improve in a future simulation.",
     "When giving suggested better answers, write realistic responses the trainee could have said in the scenario. Make them concise, professional, and aligned with the learner role.",
-    "Return exactly four rubric dimensions with these exact labels: Objective Coverage, Customer Handling, Action Clarity, Conversation Completeness.",
-    "Each rubric dimension summary must explain why that dimension received its score using trainee-side transcript evidence or a specific missing behavior.",
-    "Dimension scores should meaningfully influence the overallScore. Do not return dimensions that are disconnected from the final score.",
+    "Return exactly six rubric dimensions with these exact labels: Objective Evidence & Coverage, Discovery & Situation Framing, Empathy, Ownership & Trust, Technical / Business Accuracy, Resolution Plan & Expectations, Communication & Conversation Control.",
+    "Each rubric dimension must include one to three exact trainee-side excerpts in evidence when credit is awarded. Do not invent excerpts. Use an empty evidence array when no transcript support exists.",
+    "Each rubric dimension summary must explain why that dimension received its score using evidence or a specific missing behavior.",
+    "List criticalRisks only for material trainee-side issues such as an unsupported commitment, inaccurate product claim, unsafe advice, or seriously unprofessional conduct. Use an empty array when none exists.",
+    "Dimension scores are weighted by the supplied rubric. Do not inflate the overallScore; the application independently calculates the final score from the weighted dimensions and objective gates.",
     "Scoring guidance: 90-100 Excellent. Objectives were covered with strong evidence, communication was clear, and the trainee handled the scenario with confidence and appropriate next steps.",
     "Scoring guidance: 75-89 Good. Most objectives were covered, but there are some gaps in clarity, depth, ownership, discovery, or delivery.",
     "Scoring guidance: 60-74 Mixed. The trainee showed some useful behaviors but missed important objectives or gave incomplete responses.",
@@ -419,36 +483,7 @@ export async function generateFinalAssessment(
       text: entry.text,
       timestamp: entry.timestamp,
     })),
-    rubric: [
-      {
-        label: "Objective Coverage",
-        description:
-          "Did the trainee satisfy required goals with explicit trainee-side evidence?",
-        scoring:
-          "90-100: all required objectives clearly covered. 75-89: most required objectives covered with minor gaps. 60-74: partial coverage or incomplete responses. 40-59: several required objectives missed or vague. 0-39: required objectives mostly missed.",
-      },
-      {
-        label: "Customer Handling",
-        description:
-          "Empathy, rapport-building, ownership, objection/concern handling, escalation handling, and professional tone appropriate to the learner role.",
-        scoring:
-          "90-100: confident, role-appropriate customer handling. 75-89: professional with minor gaps. 60-74: useful but inconsistent handling. 40-59: limited empathy, ownership, or adaptation. 0-39: dismissive, confusing, or fails to address concern.",
-      },
-      {
-        label: "Action Clarity",
-        description:
-          "Clear next steps, timeline, value framing, explanation quality, follow-up expectations, and handoff quality aligned with the learner role.",
-        scoring:
-          "90-100: specific, relevant, and role-appropriate next steps. 75-89: useful plan with minor ambiguity. 60-74: some action clarity but incomplete. 40-59: generic or incomplete action plan. 0-39: no meaningful next steps.",
-      },
-      {
-        label: "Conversation Completeness",
-        description:
-          "Professional opening, discovery, adaptation to scenario context, recap, confirmation, and natural closure.",
-        scoring:
-          "90-100: complete roleplay flow with discovery, confirmation, recap, and closure. 75-89: mostly complete flow. 60-74: mixed flow with missing elements. 40-59: important flow elements missing. 0-39: fragmented or incomplete conversation.",
-      },
-    ],
+    rubric: ASSESSMENT_RUBRIC,
     scoringGuidance: {
       passed:
         "Use passed only when the trainee covered all or nearly all required objectives and the overall score is at least 75.",
@@ -478,6 +513,15 @@ export async function generateFinalAssessment(
   const aiAssessment = parseAiAssessment(content, input.objectives);
   const completed = completedObjectives(aiAssessment.objectiveResults);
   const missed = missedRequiredObjectives(aiAssessment.objectiveResults);
+  const overallScore = evidenceFirstScore(
+    aiAssessment.dimensions,
+    missed,
+    aiAssessment.criticalRisks,
+  );
+  const outcome =
+    overallScore >= 75 && missed.length === 0 && aiAssessment.criticalRisks.length === 0
+      ? "passed"
+      : "needs_review";
 
   return {
     id: `assessment-${input.transcriptSessionId}`,
@@ -489,14 +533,15 @@ export async function generateFinalAssessment(
     learnerEmail: input.learnerEmail,
     learnerRole: input.learnerRole,
     createdAt: new Date().toISOString(),
-    overallScore: aiAssessment.overallScore,
-    outcome: aiAssessment.outcome,
+    overallScore,
+    outcome,
     summary: aiAssessment.summary,
     strengths: aiAssessment.strengths,
     improvements: aiAssessment.improvements,
     completedObjectives: completed,
     missedObjectives: missed,
     dimensions: aiAssessment.dimensions,
+    criticalRisks: aiAssessment.criticalRisks,
     transcript: input.transcript,
   };
 }

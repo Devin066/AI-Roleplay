@@ -1,15 +1,22 @@
 import { NextResponse } from "next/server";
-import { getCoachFeedbackLlmConfig } from "@/src/lib/llm/jsonCompletion";
+import { randomUUID } from "node:crypto";
+import { getAuthSession } from "@/src/lib/auth/session";
+import {
+  convoAiAgentCookieName,
+  convoAiAgentCookieOptions,
+  createConvoAiAgentSessionToken,
+  hasConvoAiAgentSessionSigningSecret,
+  isValidConvoAiAgentId,
+} from "@/src/lib/convoai/agentSession";
 import { defaultRolePlayCharacterPreset } from "@/src/lib/roleplays/characterPresets";
+import { canUserAccessRolePlay } from "@/src/lib/roleplays/access";
+import { getRolePlayConfigById } from "@/src/lib/roleplays/serverStorage";
+import type { RolePlayConfig } from "@/src/lib/roleplays/types";
 
 const { RtcTokenBuilder } = require("agora-token/src/RtcTokenBuilder2");
 
 type StartRequestBody = {
-  system_message?: unknown;
-  greeting_message?: unknown;
-  greeting_message_switch?: unknown;
-  delay_ms?: unknown;
-  voice_id?: unknown;
+  roleplayId?: unknown;
 };
 
 type ConvoAiJoinResult = {
@@ -17,7 +24,16 @@ type ConvoAiJoinResult = {
   create_ts?: unknown;
   status?: unknown;
   message?: unknown;
+  detail?: unknown;
+  reason?: unknown;
 };
+
+function providerInvalidField(result: ConvoAiJoinResult | null) {
+  const providerText = [result?.message, result?.detail, result?.reason]
+    .map(asString)
+    .join(" ");
+  return providerText.match(/properties(?:\.[A-Za-z0-9_]+)+/)?.[0] ?? "unclassified";
+}
 
 type ConvoAiJoinPayload = {
   name: string;
@@ -29,14 +45,12 @@ type ConvoAiJoinPayload = {
     enable_string_uid: boolean;
     idle_timeout: number;
     llm: {
-      credential_mode: "byok";
+      credential_mode: "managed";
       vendor: "openai";
       style: "openai";
       url: string;
-      api_key: string;
       params: {
         model: string;
-        reasoning_effort?: string;
       };
       system_messages: Array<{
         role: "system";
@@ -92,27 +106,27 @@ function numberWithDefault(value: unknown, fallback: number) {
   return Number.isFinite(normalized) ? normalized : fallback;
 }
 
-function trimTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
-}
-
-function resolveConvoAiLlmUrl(baseUrl: string) {
-  const normalized = trimTrailingSlash(baseUrl);
-
-  if (normalized.endsWith("/chat/completions") || normalized.endsWith("/responses")) {
-    return normalized;
-  }
-
-  return `${normalized}/chat/completions`;
-}
-
-function resolveConvoAiProxyUrl(request: Request) {
-  const explicitUrl = asString(process.env.CONVOAI_LLM_PROXY_URL).trim();
-  if (explicitUrl) {
-    return explicitUrl;
-  }
-
-  return new URL("/api/llm/chat-completions", request.url).toString();
+function rolePlaySystemMessage(roleplay: RolePlayConfig) {
+  return [
+    roleplay.generated.system_message,
+    "CRITICAL SESSION OVERRIDE:",
+    `You are ${roleplay.character.name}, the ${roleplay.character.role}.`,
+    `You are the customer/persona in this scenario, not the ${roleplay.plan.learnerRole}.`,
+    "Never speak as the engineer, coach, evaluator, instructor, or assistant.",
+    "Do not give solutions as support staff. Respond only as the customer/persona reacting to the learner.",
+    "Stay in first person and keep every reply consistent with the character background.",
+    "AGORA FEATURE CONTEXT GUARDRAIL:",
+    "Keep the conversation anchored to the Agora feature, customer issue, and learner goals configured for this scenario.",
+    "Do not introduce unrelated Agora products, SDKs, or technical capabilities unless the learner brings them up and they are connected to the customer's issue.",
+    "If the learner gives generic advice, ask how it applies to the specific Agora scenario or customer use case.",
+    "If the learner drifts away from the configured issue, redirect back to the customer's impact and the Agora feature involved.",
+    "Do not invent technical facts, API names, product limits, pricing, or behavior not grounded in the scenario.",
+    "CONVERSATION STYLE:",
+    "Keep each reply concise and natural for a live customer call: usually 1-3 short sentences.",
+    "Ask at most one direct follow-up question per turn. Do not stack multiple questions.",
+    "When the learner asks a follow-up, answer it directly first, then ask a short clarification only if needed.",
+    "Avoid long explanations, bullet lists, and coaching language. Make the learner do the problem-solving.",
+  ].join("\n\n");
 }
 
 function buildRtcAccessToken2(params: {
@@ -139,53 +153,61 @@ function buildRtcAccessToken2(params: {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as StartRequestBody;
+  const roleplayId = asString(body.roleplayId).trim();
+  const session = await getAuthSession();
 
-  const systemMessage = asString(body.system_message).trim();
-  const greetingMessage = asString(body.greeting_message).trim();
-  const greetingMessageSwitch = asString(body.greeting_message_switch).trim();
-  const delayMs = typeof body.delay_ms === "number" ? body.delay_ms : Number.NaN;
-  const requestedVoiceId = asString(body.voice_id).trim();
-
-  if (!systemMessage) {
+  if (!session) {
     return NextResponse.json(
-      { error: "system_message is required." },
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+
+  if (!roleplayId) {
+    return NextResponse.json(
+      { error: "roleplayId is required." },
       { status: 400 },
     );
   }
 
-  if (greetingMessageSwitch !== "single_first") {
+  const roleplay = await getRolePlayConfigById(roleplayId);
+  if (!roleplay) {
+    return NextResponse.json({ error: "Roleplay not found." }, { status: 404 });
+  }
+
+  if (!canUserAccessRolePlay(session, roleplay)) {
+    return NextResponse.json({ error: "Roleplay access denied." }, { status: 403 });
+  }
+
+  if (!hasConvoAiAgentSessionSigningSecret()) {
     return NextResponse.json(
-      { error: "greeting_message_switch must be single_first." },
-      { status: 400 },
+      { error: "A server-side session signing secret is required." },
+      { status: 500 },
     );
   }
 
-  if (![800, 1200].includes(delayMs)) {
-    return NextResponse.json({ error: "delay_ms must be 800 or 1200." }, { status: 400 });
-  }
+  const systemMessage = rolePlaySystemMessage(roleplay);
+  const greetingMessage = roleplay.generated.greeting_message.trim();
+  const greetingMessageSwitch = roleplay.generated.greeting_message_switch;
+  const delayMs = roleplay.generated.delay_ms;
+  const requestedVoiceId = roleplay.character.voiceId?.trim() ?? "";
 
-  const channelName = `roleplay-session-${Date.now()}`;
+  // A random channel name prevents concurrent sessions from ever sharing RTC credentials.
+  const channelName = `roleplay-session-${randomUUID()}`;
   const traineeUid = "7001001";
   const agentUid = "9001001";
-  const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
+  const appId = process.env.AGORA_APP_ID ?? process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
   const appCertificate = process.env.AGORA_APP_CERTIFICATE ?? "";
   const customerId = process.env.AGORA_CUSTOMER_ID ?? "";
   const customerSecret = process.env.AGORA_CUSTOMER_SECRET ?? "";
   const asrVendor = "deepgram";
   const asrModel = "nova-3";
-  const coachLlmConfig = getCoachFeedbackLlmConfig();
   const llmVendor = "openai";
-  const llmModel = coachLlmConfig.model;
-  const llmUrl =
-    coachLlmConfig.wireApi === "responses"
-      ? resolveConvoAiProxyUrl(request)
-      : resolveConvoAiLlmUrl(coachLlmConfig.baseUrl);
-  const llmApiKey = coachLlmConfig.apiKey;
+  const llmUrl = "https://api.openai.com/v1/chat/completions";
+  // This is an Agora-managed model selection, not an app-provided OpenAI credential.
+  const llmModel = "gpt-4o-mini";
   const llmParams = {
     model: llmModel,
-    ...(coachLlmConfig.reasoningEffort
-      ? { reasoning_effort: coachLlmConfig.reasoningEffort }
-      : {}),
   };
   const ttsVendor = "minimax";
   const ttsModel = withDefault(process.env.CONVOAI_MINIMAX_TTS_MODEL, "speech-2.8-turbo");
@@ -209,7 +231,7 @@ export async function POST(request: Request) {
 
   if (!appId) {
     return NextResponse.json(
-      { error: "NEXT_PUBLIC_AGORA_APP_ID is required on the server." },
+      { error: "AGORA_APP_ID is required on the server." },
       { status: 500 },
     );
   }
@@ -226,16 +248,6 @@ export async function POST(request: Request) {
       {
         error:
           "AGORA_CUSTOMER_ID and AGORA_CUSTOMER_SECRET are required on the server.",
-      },
-      { status: 500 },
-    );
-  }
-
-  if (!llmApiKey || !llmModel || !llmUrl) {
-    return NextResponse.json(
-      {
-        error:
-          "Coach feedback LLM credentials are required for ConvoAI LLM BYOK. Configure OSS_API_KEY or FINAL_ASSESSMENT_API_KEY plus the coach feedback model/base URL.",
       },
       { status: 500 },
     );
@@ -265,11 +277,11 @@ export async function POST(request: Request) {
       enable_string_uid: false,
       idle_timeout: 120,
       llm: {
-        credential_mode: "byok",
+        credential_mode: "managed",
         vendor: llmVendor,
         style: "openai",
+        // Agora requires a valid public provider endpoint even when it supplies the credentials.
         url: llmUrl,
-        api_key: llmApiKey,
         params: llmParams,
         system_messages: [
           {
@@ -331,14 +343,20 @@ export async function POST(request: Request) {
     | null;
 
   if (!joinResponse.ok) {
-    const providerMessage = asString(joinResult?.message).trim();
-
+    const requestId = randomUUID();
+    const invalidField = providerInvalidField(joinResult);
+    // Preserve only the rejected field path for server diagnostics, never provider response bodies.
+    console.error("ConvoAI join rejected", {
+      requestId,
+      status: joinResponse.status,
+      invalidField,
+    });
     return NextResponse.json(
       {
         error:
-          providerMessage ||
-          `Agora ConvoAI join failed with HTTP ${joinResponse.status}.`,
-        details: joinResult,
+          invalidField === "unclassified"
+            ? `Agora ConvoAI could not start the roleplay session (HTTP ${joinResponse.status}; reference ${requestId}).`
+            : `Agora ConvoAI rejected ${invalidField} (HTTP ${joinResponse.status}; reference ${requestId}).`,
       },
       { status: joinResponse.status },
     );
@@ -346,23 +364,18 @@ export async function POST(request: Request) {
 
   const agentId = asString(joinResult?.agent_id).trim();
 
-  if (!agentId) {
+  if (!isValidConvoAiAgentId(agentId)) {
     return NextResponse.json(
       {
         error:
-          "Agora ConvoAI join succeeded but did not return an agent_id.",
-        details: joinResult,
+          "Agora ConvoAI returned an invalid agent identifier.",
       },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     status: asString(joinResult?.status).trim() || "RUNNING",
-    agentId,
-    createTs:
-      typeof joinResult?.create_ts === "number" ? joinResult.create_ts : null,
-    channelName,
     traineeUid,
     agentUid,
     engineerRtc: {
@@ -371,26 +384,14 @@ export async function POST(request: Request) {
       uid: traineeUid,
       token: traineeRtcToken,
     },
-    configSummary: {
-      greeting_message_switch: greetingMessageSwitch,
-      delay_ms: delayMs,
-      llmProvider: `${llmVendor}:byok`,
-      llmCredentialMode: "byok",
-      llmSource: `coach-feedback:${coachLlmConfig.provider}`,
-      llmProxyEnabled: coachLlmConfig.wireApi === "responses",
-      llmModel,
-      llmUrl,
-      asrProvider: `${asrVendor}:managed`,
-      asrModel,
-      asrLanguage: "en-US",
-      ttsProvider: `${ttsVendor}:managed`,
-      ttsModel,
-      ttsVoiceId,
-      ttsSpeed,
-      appIdConfigured: Boolean(appId),
-      rtcTokenGenerated: Boolean(agentRtcToken),
-      tokenVersion: "AccessToken2",
-      baseUrl,
-    },
   });
+
+  // Keep the agent identifier server-only; later control requests read this signed HttpOnly cookie.
+  response.cookies.set(
+    convoAiAgentCookieName,
+    createConvoAiAgentSessionToken(session.id, agentId),
+    convoAiAgentCookieOptions(),
+  );
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  return response;
 }

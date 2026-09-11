@@ -107,68 +107,85 @@ function statusTone(status: HealthStatus) {
     : "border-warning/30 bg-warning-subtle text-warning-subtle-foreground";
 }
 
-function MiniBars({ tone = "bg-primary" }: { tone?: string }) {
-  return (
-    <div className="flex h-10 items-end gap-1">
-      {[38, 52, 45, 64, 58, 72, 68, 82, 76, 88].map((height, index) => (
-        <span
-          key={`${height}-${index}`}
-          className={`w-1.5 rounded-full ${tone}`}
-          style={{ height: `${height}%` }}
-        />
-      ))}
-    </div>
-  );
-}
+function ActivityChart({
+  metrics,
+}: {
+  metrics: RootDashboardData["metrics"];
+}) {
+  const data = [
+    { label: "Attempts", value: metrics.attempts, tone: "fill-primary" },
+    { label: "Assessments", value: metrics.assessments, tone: "fill-info" },
+    { label: "Courses", value: metrics.totalCourses, tone: "fill-success" },
+    { label: "Active users", value: metrics.activeUsers, tone: "fill-warning" },
+  ] as const;
+  const maximum = Math.max(...data.map((item) => item.value), 1);
 
-function NetworkChart() {
   return (
-    <div className="mt-6 h-64 rounded-2xl bg-background p-4">
+    <figure className="mt-6 rounded-xl bg-surface-sunken p-4 sm:p-5">
       <svg
-        viewBox="0 0 760 220"
-        className="h-full w-full"
+        viewBox="0 0 620 230"
+        className="h-56 w-full"
         role="img"
-        aria-label="Dashboard activity trend"
+        aria-labelledby="activity-chart-title activity-chart-description"
       >
-        {[0, 1, 2, 3, 4].map((line) => (
+        <title id="activity-chart-title">Platform activity snapshot</title>
+        <desc id="activity-chart-description">
+          A relative comparison of saved learner attempts, final assessments,
+          courses, and active users. Bar heights are scaled to the largest
+          value in this snapshot.
+        </desc>
+        {[42, 89, 136, 183].map((position) => (
           <line
-            key={line}
-            x1="0"
-            x2="760"
-            y1={30 + line * 40}
-            y2={30 + line * 40}
-            stroke="#e2e8f0"
-            strokeDasharray="4 6"
+            key={position}
+            x1="46"
+            x2="596"
+            y1={position}
+            y2={position}
+            className="stroke-border"
+            strokeDasharray="3 7"
           />
         ))}
-        <path
-          d="M0 155 C70 125 110 115 175 122 C250 132 285 158 355 110 C425 62 490 110 560 82 C640 50 695 62 760 72"
-          fill="none"
-          stroke="#14b8a6"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        <path
-          d="M0 175 C75 145 120 138 175 148 C250 160 295 170 358 132 C435 92 495 142 560 122 C635 92 690 98 760 108"
-          fill="none"
-          stroke="#60a5fa"
-          strokeDasharray="8 8"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-        <path
-          d="M0 155 C70 125 110 115 175 122 C250 132 285 158 355 110 C425 62 490 110 560 82 C640 50 695 62 760 72 L760 220 L0 220 Z"
-          fill="url(#activityGradient)"
-          opacity="0.45"
-        />
-        <defs>
-          <linearGradient id="activityGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#99f6e4" />
-            <stop offset="100%" stopColor="#ffffff" />
-          </linearGradient>
-        </defs>
+        {data.map((item, index) => {
+          const height = Math.max(10, Math.round((item.value / maximum) * 148));
+          const x = 74 + index * 138;
+          const y = 183 - height;
+
+          return (
+            <g key={item.label}>
+              <rect
+                x={x}
+                y={y}
+                width="72"
+                height={height}
+                rx="10"
+                className={`dashboard-chart-bar ${item.tone}`}
+                style={{ "--motion-delay": `${index * 90}ms` } as React.CSSProperties}
+              />
+              <text
+                x={x + 36}
+                y="207"
+                textAnchor="middle"
+                className="fill-subtle-foreground text-[11px] font-medium"
+              >
+                {item.label}
+              </text>
+              <text
+                x={x + 36}
+                y={Math.max(24, y - 10)}
+                textAnchor="middle"
+                className="fill-foreground text-sm font-bold"
+              >
+                {formatNumber(item.value)}
+              </text>
+            </g>
+          );
+        })}
       </svg>
-    </div>
+      <figcaption className="mt-2 text-sm leading-6 text-muted-foreground">
+        Snapshot of recorded workspace activity. Heights compare measures, not
+        time periods.
+      </figcaption>
+    </figure>
   );
 }
 
@@ -177,28 +194,19 @@ function MetricCard({
   value,
   helper,
   accent,
-  children,
 }: {
   label: string;
   value: string;
   helper: string;
   accent: string;
-  children?: React.ReactNode;
 }) {
   return (
-    <article className="rounded-xl border border-border bg-surface p-5 shadow-soft">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle-foreground">
-            {label}
-          </p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-            {value}
-          </p>
-          <p className={`mt-1 text-sm font-medium ${accent}`}>{helper}</p>
-        </div>
-        {children}
-      </div>
+    <article className="rounded-xl bg-surface-raised p-5 shadow-soft ring-1 ring-border transition duration-slow ease-out hover:-translate-y-0.5 hover:shadow-raised">
+      <p className="text-sm font-semibold text-muted-foreground">{label}</p>
+      <p className="tabular mt-4 text-4xl font-bold tracking-tight text-foreground">
+        {value}
+      </p>
+      <p className={`mt-2 text-sm font-semibold ${accent}`}>{helper}</p>
     </article>
   );
 }
@@ -245,18 +253,15 @@ function RootAdminDashboard({ data }: { data: RootDashboardData }) {
   ).length;
 
   return (
-    <div className="-m-4 space-y-5 bg-surface-sunken p-4 text-foreground sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="-m-4 space-y-6 bg-surface-sunken p-4 text-foreground sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
+      <header className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            Overview
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Root Admin Dashboard
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Database-backed platform operations, course health, and model
-            configuration.
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+            A focused view of learning activity, workspace readiness, and the
+            actions that need attention.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -275,85 +280,43 @@ function RootAdminDashboard({ data }: { data: RootDashboardData }) {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <MetricCard
-          label="Total Users"
-          value={formatNumber(data.metrics.totalUsers)}
-          helper={`${data.metrics.activeUsers} active / ${data.metrics.inactiveUsers} inactive`}
-          accent="text-success-subtle-foreground"
-        >
-          <MiniBars tone="bg-success/70" />
-        </MetricCard>
-        <MetricCard
-          label="Courses"
-          value={formatNumber(data.metrics.totalCourses)}
-          helper={`${data.metrics.publishedCourses} published / ${data.metrics.draftCourses} drafts`}
-          accent="text-primary"
-        >
-          <MiniBars tone="bg-primary/70" />
-        </MetricCard>
-        <MetricCard
-          label="Assessments"
-          value={formatNumber(data.metrics.assessments)}
-          helper={`Avg score ${formatNumber(data.metrics.averageScore, "%")}`}
-          accent="text-warning-subtle-foreground"
-        >
-          <MiniBars tone="bg-warning/70" />
-        </MetricCard>
-        <MetricCard
-          label="Attempts"
-          value={formatNumber(data.metrics.attempts)}
-          helper="Saved learner completions"
-          accent="text-success-subtle-foreground"
-        />
-        <MetricCard
-          label="Pass Rate"
-          value={formatNumber(data.metrics.passRate, "%")}
-          helper="Across final assessments"
-          accent="text-danger-subtle-foreground"
-        />
-        <MetricCard
-          label="Health Alerts"
-          value={formatNumber(criticalHealth)}
-          helper={
-            criticalHealth === 0 ? "All systems ready" : "Needs configuration"
-          }
-          accent={
-            criticalHealth === 0
-              ? "text-success-subtle-foreground"
-              : "text-warning-subtle-foreground"
-          }
-        />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.45fr_0.7fr]">
-        <article className="rounded-xl border border-border bg-surface p-5 shadow-soft">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.75fr)]">
+        <article className="rounded-xl bg-surface p-5 shadow-raised ring-1 ring-border sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-bold text-foreground">
-                Platform Activity
-              </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-                {formatNumber(data.metrics.attempts + data.metrics.assessments)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Attempts + final assessments recorded
+              <h2 className="text-xl font-bold tracking-tight text-foreground">
+                Learning activity
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                Compare the current workspace totals to understand where the
+                learning operation has the most volume.
               </p>
             </div>
-            <div className="rounded-lg bg-muted p-1 text-xs font-semibold text-muted-foreground">
-              <span className="rounded-md bg-surface px-3 py-1.5 shadow-sm">
-                7 days
-              </span>
-              <span className="px-3 py-1.5">30 days</span>
-              <span className="px-3 py-1.5">90 days</span>
+            <div className="rounded-lg bg-primary-subtle px-3 py-2 text-sm font-semibold text-primary">
+              <span className="tabular text-lg font-bold">
+                {formatNumber(data.metrics.attempts + data.metrics.assessments)}
+              </span>{" "}
+              records
             </div>
           </div>
-          <NetworkChart />
+          <ActivityChart metrics={data.metrics} />
         </article>
 
-        <article className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
-          <div className="border-b border-border p-5">
-            <p className="text-sm font-bold text-foreground">System Health</p>
+        <article className="overflow-hidden rounded-xl bg-surface shadow-soft ring-1 ring-border">
+          <div className="flex items-center justify-between gap-4 border-b border-border p-5">
+            <div>
+              <h2 className="font-bold text-foreground">System Health</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {criticalHealth === 0
+                  ? "No configuration blockers"
+                  : `${criticalHealth} item${criticalHealth === 1 ? "" : "s"} needs attention`}
+              </p>
+            </div>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-bold ${criticalHealth === 0 ? statusTone("operational") : statusTone("attention")}`}
+            >
+              {criticalHealth === 0 ? "Ready" : "Review"}
+            </span>
           </div>
           <div className="divide-y divide-border">
             {data.health.map((item) => (
@@ -382,9 +345,40 @@ function RootAdminDashboard({ data }: { data: RootDashboardData }) {
         </article>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <article className="rounded-xl border border-border bg-surface p-5 shadow-soft">
-          <p className="text-sm font-bold text-foreground">Role Breakdown</p>
+      <section className="grid gap-4 md:grid-cols-3">
+        <MetricCard
+          label="People learning"
+          value={formatNumber(data.metrics.totalUsers)}
+          helper={`${data.metrics.activeUsers} active · ${data.metrics.inactiveUsers} inactive`}
+          accent="text-success-subtle-foreground"
+        />
+        <MetricCard
+          label="Course catalogue"
+          value={formatNumber(data.metrics.totalCourses)}
+          helper={`${data.metrics.publishedCourses} published · ${data.metrics.draftCourses} drafts`}
+          accent="text-primary"
+        />
+        <MetricCard
+          label="Assessment quality"
+          value={formatNumber(data.metrics.passRate, "%")}
+          helper={`Average score ${formatNumber(data.metrics.averageScore, "%")}`}
+          accent="text-warning-subtle-foreground"
+        />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <article className="rounded-xl bg-surface p-5 shadow-soft ring-1 ring-border">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-foreground">Role Breakdown</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Current workspace membership
+              </p>
+            </div>
+            <span className="tabular text-sm font-bold text-foreground">
+              {formatNumber(data.metrics.totalUsers)} total
+            </span>
+          </div>
           <div className="mt-5 space-y-4">
             {data.roleBreakdown.map((item, index) => {
               const total = Math.max(1, data.metrics.totalUsers);
@@ -400,10 +394,15 @@ function RootAdminDashboard({ data }: { data: RootDashboardData }) {
                       {item.value}
                     </span>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-muted">
+                  <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={`h-2 rounded-full ${colors[index]}`}
-                      style={{ width: `${width}%` }}
+                      className={`dashboard-progress-fill h-full rounded-full ${colors[index]}`}
+                      style={
+                        {
+                          "--fill-width": `${width}%`,
+                          "--motion-delay": `${index * 100}ms`,
+                        } as React.CSSProperties
+                      }
                     />
                   </div>
                 </div>
@@ -412,11 +411,14 @@ function RootAdminDashboard({ data }: { data: RootDashboardData }) {
           </div>
         </article>
 
-        <article className="rounded-xl border border-border bg-surface p-5 shadow-soft">
+        <article className="rounded-xl bg-surface p-5 shadow-soft ring-1 ring-border">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-bold text-foreground">
-              Recent Assessments
-            </p>
+            <div>
+              <h2 className="font-bold text-foreground">Recent Assessments</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Latest recorded final assessments
+              </p>
+            </div>
             <Link
               href="/assessment"
               className="text-sm font-semibold text-primary hover:text-primary"
@@ -559,32 +561,41 @@ function LearnerDashboard({ data }: { data: LearnerDashboardData }) {
           </div>
 
           <div className="rounded-[2rem] border border-border bg-surface/85 p-5 shadow-soft backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-subtle-foreground">
-              Training Progress
-            </p>
-            <div className="mt-5 flex items-center gap-5">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Training progress
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Complete a course to move your learning path forward.
+                </p>
+              </div>
+              <span className="tabular text-3xl font-bold tracking-tight text-primary">
+                {formatNumber(completionRate, "%")}
+              </span>
+            </div>
+            <div
+              className="mt-5 h-3 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Course completion"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={completionRate ?? 0}
+            >
               <div
-                className="grid h-28 w-28 place-items-center rounded-full bg-[conic-gradient(hsl(var(--primary))_var(--progress),hsl(var(--muted))_0)] p-2"
+                className="dashboard-progress-fill h-full rounded-full bg-primary"
                 style={
                   {
-                    "--progress": `${completionRate ?? 0}%`,
+                    "--fill-width": `${completionRate ?? 0}%`,
+                    "--motion-delay": "120ms",
                   } as React.CSSProperties
                 }
-              >
-                <div className="grid h-full w-full place-items-center rounded-full bg-surface text-2xl font-semibold text-foreground">
-                  {formatNumber(completionRate, "%")}
-                </div>
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  Course completion
-                </p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {data.metrics.completedCourses} completed out of{" "}
-                  {data.metrics.assignedCourses} assigned courses.
-                </p>
-              </div>
+              />
             </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              {data.metrics.completedCourses} completed out of{" "}
+              {data.metrics.assignedCourses} assigned courses.
+            </p>
             {nextCourse && (
               <div className="mt-5 rounded-2xl bg-primary-subtle/80 p-4 ring-1 ring-ring/30">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
@@ -692,7 +703,7 @@ function LearnerDashboard({ data }: { data: LearnerDashboardData }) {
                       </p>
                     </div>
                     <Link
-                      href={`/admin/roleplays/preview/${course.id}/session`}
+                      href={`/roleplays/${course.id}/session`}
                       className="shrink-0 inline-flex items-center justify-center rounded-2xl bg-primary min-h-control px-4 py-2 text-center text-sm font-semibold text-primary-foreground shadow-raised transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     >
                       {course.completed ? "Practice Again" : "Start"}

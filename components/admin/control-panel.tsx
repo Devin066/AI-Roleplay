@@ -876,6 +876,12 @@ export function ControlPanel({
                       </td>
                       <td className="border-b border-border px-5 py-3">
                         <div className="flex justify-end gap-2">
+                          <Link
+                            href={`/control-panel/users/${user.id}/learning-record`}
+                            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted-foreground shadow-sm transition hover:border-primary/40 hover:bg-primary-subtle hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                          >
+                            Profile
+                          </Link>
                           <button
                             type="button"
                             onClick={() =>

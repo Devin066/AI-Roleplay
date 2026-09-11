@@ -17,6 +17,7 @@ import {
   CoursesIcon,
   DashboardIcon,
   LabIcon,
+  MessageSquareIcon,
   ProfileIcon,
   SimulationIcon,
 } from "@/components/ui/icons";
@@ -49,11 +50,13 @@ export function Sidebar({
   role,
   mobileOpen = false,
   onCloseMobile,
+  onOpenFeedback,
 }: {
   collapsed?: boolean;
   role: AppRole;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
+  onOpenFeedback: () => void;
 }) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<
@@ -241,6 +244,34 @@ export function Sidebar({
             );
           })}
         </nav>
+
+        <div
+          className={cn(
+            "mt-4 shrink-0 border-t border-sidebar-border pt-4",
+            collapsed && "lg:border-t-0 lg:pt-0",
+          )}
+        >
+          <button
+            type="button"
+            title={collapsed ? "Send feedback" : undefined}
+            onClick={() => {
+              // Keep the mobile drawer open under feedback so closing feedback
+              // returns focus to a visible control rather than an off-screen one.
+              onOpenFeedback();
+            }}
+            className={cn(
+              "flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium",
+              "text-sidebar-muted-foreground transition-colors duration-fast ease-out",
+              "hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-offset-sidebar",
+              collapsed && "lg:justify-center",
+            )}
+          >
+            <MessageSquareIcon className="h-5 w-5 shrink-0" />
+            <span className={cn("truncate", collapsed && "lg:hidden")}>
+              Send feedback
+            </span>
+          </button>
+        </div>
       </aside>
     </>
   );

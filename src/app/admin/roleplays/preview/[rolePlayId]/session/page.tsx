@@ -34,8 +34,6 @@ type CallStatus = "Preparing" | "Connecting" | "In Call" | "Ended";
 type SimulationState = "preparing" | "in_call" | "ending" | "finished";
 
 type StartResponse = {
-  agentId: string;
-  channelName: string;
   traineeUid: string;
   agentUid: string;
   engineerRtc: {
@@ -43,10 +41,6 @@ type StartResponse = {
     channelName: string;
     uid: string;
     token: string;
-  };
-  configSummary?: {
-    ttsModel?: string;
-    ttsSpeed?: number;
   };
 };
 
@@ -182,29 +176,6 @@ function captionSnippet(text: string) {
   return caption;
 }
 
-function withCustomerPersonaGuard(config: RolePlayConfig) {
-  return [
-    config.generated.system_message,
-    "CRITICAL SESSION OVERRIDE:",
-    `You are ${config.character.name}, the ${config.character.role}.`,
-    `You are the customer/persona in this scenario, not the ${config.plan.learnerRole}.`,
-    "Never speak as the engineer, coach, evaluator, instructor, or assistant.",
-    "Do not give solutions as support staff. Respond only as the customer/persona reacting to the learner.",
-    "Stay in first person and keep every reply consistent with the character background.",
-    "AGORA FEATURE CONTEXT GUARDRAIL:",
-    "Keep the conversation anchored to the Agora feature, customer issue, and learner goals configured for this scenario.",
-    "Do not introduce unrelated Agora products, SDKs, or technical capabilities unless the learner brings them up and they are connected to the customer's issue.",
-    "If the learner gives generic advice, ask how it applies to the specific Agora scenario or customer use case.",
-    "If the learner drifts away from the configured issue, redirect back to the customer's impact and the Agora feature involved.",
-    "Do not invent technical facts, API names, product limits, pricing, or behavior not grounded in the scenario.",
-    "CONVERSATION STYLE:",
-    "Keep each reply concise and natural for a live customer call: usually 1-3 short sentences.",
-    "Ask at most one direct follow-up question per turn. Do not stack multiple questions.",
-    "When the learner asks a follow-up, answer it directly first, then ask a short clarification only if needed.",
-    "Avoid long explanations, bullet lists, and coaching language. Make the learner do the problem-solving.",
-  ].join("\n\n");
-}
-
 export default function RolePlayPreviewSessionPage() {
   const router = useRouter();
   const params = useParams<{ rolePlayId: string }>();
@@ -240,7 +211,6 @@ export default function RolePlayPreviewSessionPage() {
   const [attemptStatus, setAttemptStatus] = useState<RolePlayAttemptStatus | null>(null);
   const startAttemptedRef = useRef(false);
   const attemptRecordedRef = useRef(false);
-  const agentIdRef = useRef<string | null>(null);
   const transcriptContextRef = useRef<{ traineeUid?: string; agentUid?: string }>({});
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
@@ -518,34 +488,17 @@ export default function RolePlayPreviewSessionPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          system_message: withCustomerPersonaGuard(activeConfig),
-          greeting_message: activeConfig.generated.greeting_message,
-          greeting_message_switch: activeConfig.generated.greeting_message_switch,
-          delay_ms: activeConfig.generated.delay_ms,
-          voice_id: activeConfig.character.voiceId,
+          roleplayId: activeConfig.id,
         }),
       });
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string; details?: unknown }
-          | null;
-        const detailText =
-          typeof payload?.details === "string"
-            ? payload.details
-            : payload?.details
-              ? JSON.stringify(payload.details)
-              : "";
-        throw new Error(
-          [payload?.error ?? `Unable to start role play voice session. HTTP ${response.status}.`, detailText]
-            .filter(Boolean)
-            .join(" "),
-        );
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? `Unable to start role play voice session. HTTP ${response.status}.`);
       }
 
       const data = (await response.json()) as StartResponse;
       setStartResponse(data);
-      agentIdRef.current = data.agentId;
       transcriptContextRef.current = {
         traineeUid: data.traineeUid,
         agentUid: data.agentUid,
@@ -667,18 +620,14 @@ export default function RolePlayPreviewSessionPage() {
     transcriptItemMapRef.current.clear();
     finalizedTranscriptKeysRef.current.clear();
 
-    if (callEndApi && agentIdRef.current) {
-      const agentId = agentIdRef.current;
-      agentIdRef.current = null;
+    if (callEndApi) {
       cleanupTasks.push(
         fetch("/api/convoai/end", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            agent_id: agentId,
-          }),
+          body: "{}",
         }).catch(() => undefined),
       );
     }
@@ -741,10 +690,6 @@ export default function RolePlayPreviewSessionPage() {
           body: JSON.stringify({
             transcriptSessionId: savedTranscriptSessionId,
             scenarioId: config.id,
-            scenarioTitle: config.settings.meetingTitle,
-            learnerRole: config.plan.learnerRole,
-            objectives: learnerGoals,
-            transcript: transcriptEntries,
           }),
         });
 
@@ -898,8 +843,8 @@ export default function RolePlayPreviewSessionPage() {
       state.carryMs += elapsedMs;
 
       const wordDelayMs = estimateTtsWordDelayMs(
-        startResponse?.configSummary?.ttsModel,
-        startResponse?.configSummary?.ttsSpeed,
+        undefined,
+        undefined,
         latestAiCaptionFinalRef.current,
       );
 
@@ -926,8 +871,6 @@ export default function RolePlayPreviewSessionPage() {
   }, [
     callStatus,
     simulationState,
-    startResponse?.configSummary?.ttsModel,
-    startResponse?.configSummary?.ttsSpeed,
   ]);
 
   if (!config || (!sessionUser && !accessDenied)) {

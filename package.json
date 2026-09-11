@@ -12,6 +12,12 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
+    "prisma:local:deploy": "node scripts/db/run-prisma-local.mjs migrate deploy",
+    "prisma:local:status": "node scripts/db/run-prisma-local.mjs migrate status",
+    "db:local:start": "bash scripts/db/local-postgres.sh start",
+    "db:local:stop": "bash scripts/db/local-postgres.sh stop",
+    "db:local:status": "bash scripts/db/local-postgres.sh status",
+    "db:local:create-admin": "node scripts/db/create-local-admin.mjs",
     "db:export:neon": "bash scripts/db/export-neon.sh",
     "db:restore:local": "bash scripts/db/restore-local.sh",
     "db:verify:local": "bash scripts/db/verify-local.sh"

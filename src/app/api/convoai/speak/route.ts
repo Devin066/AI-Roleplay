@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { getAuthSession } from "@/src/lib/auth/session";
+import {
+  convoAiAgentCookieName,
+  readConvoAiAgentSessionToken,
+} from "@/src/lib/convoai/agentSession";
 
 type SpeakRequestBody = {
-  agent_id?: unknown;
   text?: unknown;
 };
 
@@ -11,17 +16,27 @@ function asString(value: unknown) {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as SpeakRequestBody;
-  const agentId = asString(body.agent_id).trim();
   const text = asString(body.text).trim();
 
-  if (!agentId) {
-    return NextResponse.json({ error: "agent_id is required." }, { status: 400 });
+  const session = await getAuthSession();
+  if (!session) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
+
+  const cookieStore = await cookies();
+  const agentId = readConvoAiAgentSessionToken(
+    cookieStore.get(convoAiAgentCookieName)?.value,
+    session.id,
+  );
+  if (!agentId) {
+    return NextResponse.json({ error: "No active roleplay session." }, { status: 404 });
+  }
+
   if (!text) {
     return NextResponse.json({ error: "text is required." }, { status: 400 });
   }
 
-  const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
+  const appId = process.env.AGORA_APP_ID ?? process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
   const customerId = process.env.AGORA_CUSTOMER_ID ?? "";
   const customerSecret = process.env.AGORA_CUSTOMER_SECRET ?? "";
   const baseUrl = (
@@ -33,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "NEXT_PUBLIC_AGORA_APP_ID, AGORA_CUSTOMER_ID, and AGORA_CUSTOMER_SECRET are required on the server.",
+          "AGORA_APP_ID, AGORA_CUSTOMER_ID, and AGORA_CUSTOMER_SECRET are required on the server.",
       },
       { status: 500 },
     );
@@ -54,13 +69,10 @@ export async function POST(request: Request) {
     cache: "no-store",
   });
 
-  const speakResult = await speakResponse.json().catch(() => ({}));
-
   if (!speakResponse.ok) {
     return NextResponse.json(
       {
         error: `Agora ConvoAI speak failed with HTTP ${speakResponse.status}.`,
-        details: speakResult,
       },
       { status: speakResponse.status },
     );
@@ -68,7 +80,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     status: "speaking",
-    agentId,
   });
 }
-

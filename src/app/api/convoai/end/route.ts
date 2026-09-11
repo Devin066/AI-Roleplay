@@ -1,24 +1,28 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { getAuthSession } from "@/src/lib/auth/session";
+import {
+  convoAiAgentCookieName,
+  convoAiAgentCookieOptions,
+  readConvoAiAgentSessionToken,
+} from "@/src/lib/convoai/agentSession";
 
-type EndRequestBody = {
-  agent_id?: unknown;
-};
-
-function asString(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as EndRequestBody;
-  const agentId = asString(body.agent_id).trim();
-
-  if (!agentId) {
-    return NextResponse.json({
-      status: "ended",
-    });
+export async function POST() {
+  const session = await getAuthSession();
+  if (!session) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
+  const cookieStore = await cookies();
+  const agentId = readConvoAiAgentSessionToken(
+    cookieStore.get(convoAiAgentCookieName)?.value,
+    session.id,
+  );
+  if (!agentId) {
+    return NextResponse.json({ error: "No active roleplay session." }, { status: 404 });
+  }
+
+  const appId = process.env.AGORA_APP_ID ?? process.env.NEXT_PUBLIC_AGORA_APP_ID ?? "";
   const customerId = process.env.AGORA_CUSTOMER_ID ?? "";
   const customerSecret = process.env.AGORA_CUSTOMER_SECRET ?? "";
   const baseUrl = (
@@ -30,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "NEXT_PUBLIC_AGORA_APP_ID, AGORA_CUSTOMER_ID, and AGORA_CUSTOMER_SECRET are required on the server.",
+          "AGORA_APP_ID, AGORA_CUSTOMER_ID, and AGORA_CUSTOMER_SECRET are required on the server.",
       },
       { status: 500 },
     );
@@ -46,20 +50,22 @@ export async function POST(request: Request) {
     cache: "no-store",
   });
 
-  const leaveResult = await leaveResponse.json().catch(() => ({}));
-
   if (!leaveResponse.ok) {
     return NextResponse.json(
       {
         error: `Agora ConvoAI leave failed with HTTP ${leaveResponse.status}.`,
-        details: leaveResult,
       },
       { status: leaveResponse.status },
     );
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     status: "ended",
-    agentId,
   });
+  response.cookies.set(convoAiAgentCookieName, "", {
+    ...convoAiAgentCookieOptions(),
+    maxAge: 0,
+  });
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  return response;
 }
